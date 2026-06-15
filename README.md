@@ -6,6 +6,7 @@
 Click the green button that says "Code" and pull the folder called "satmathextension-main" to your desktop or wherever you can easily access
 ### Install ollama ( if you havent)
 curl -fsSL https://ollama.com/install.sh | sh
+
 run this after to prevent 403 error: launchctl setenv OLLAMA_ORIGINS "*"
 ### Download models to use locally for the tutor
 command for the chat model i used: ollama pull qwen2.5:7b

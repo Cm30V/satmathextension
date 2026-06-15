@@ -12,7 +12,45 @@ const GLUED_PROSE_WORDS = [
   'function', 'volume', 'prism', 'height', 'length', 'width', 'inches',
   'which', 'terms', 'cubic', 'more', 'than', 'given', 'find', 'what',
   'right', 'base', 'width', 'degrees', 'answer', 'choices',
-  'with', 'from', 'into', 'that', 'this', 'have', 'total', 'tiles', 'probability'
+  'with', 'from', 'into', 'that', 'this', 'have', 'total', 'tiles', 'probability',
+  'students', 'student', 'participate', 'participating', 'participated', 'games',
+  'food', 'table', 'random', 'selected', 'calculate', 'formula', 'simplify',
+  'fraction', 'therefore', 'following', 'information', 'provided', 'actual',
+  'identify', 'assume', 'guide', 'solution', 'next', 'students', 'whodid',
+  'didnot', 'buyfood', 'notbuy', 'participatein', 'ingames', 'but', 'who', 'did',
+  'not', 'buy', 'food',
+  'equation', 'equations', 'linear', 'relationship', 'describes', 'solve', 'step',
+  'substitute', 'points', 'pairs', 'fits', 'would', 'like', 'try', 'test', 'each',
+  'both', 'usethe', 'fromthe', 'totest', 'touse', 'lets', 'first', 'table',
+  'whichequation', 'youlike', 'totry', 'tryfirst',
+  'when', 'whenx', 'noneof', 'however', 'recheck', 'provided', 'assume',
+];
+
+const TUTOR_CHAT_GLUE_PHRASES = [
+  [/Let\s+ssolvethisstep-by-step/gi, "Let's solve this step-by-step"],
+  [/\bLetsolvethisstep-by-step\b/gi, "Let's solve this step-by-step"],
+  [/\bLet['\u2019\u2032]?\s*solvethisstep[\u2212-]by[\u2212-]step\b/gi, "Let's solve this step-by-step"],
+  [/\bWhichequationwouldyouliketotryfirst\b/gi, 'Which equation would you like to try first'],
+  [/\bFirst,let['\u2019]?susethepointsfromthetabletotesteachequation\b/gi, "First, let's use the points from the table to test each equation"],
+  [/\bSubstitutethesepointsintoeachequationandseewhichonefitsbothpairs\b/gi, 'Substitute these points into each equation and see which one fits both pairs'],
+  [/\bTable:\((\d+)\s*,\s*(\d+)\)\s*,\s*\((\d+)\s*,\s*(\d+)\)/g, 'Table: ($1, $2), ($3, $4)'],
+  [/\bstep[\u2212-]by[\u2212-]step\b/gi, 'step-by-step'],
+  [/\blinear equation\b/gi, 'linear equation'],
+  [/\)(\s*[A-Z][a-z])/g, ') $1'],
+];
+
+const TABLE_PROBABILITY_GLUE_PHRASES = [
+  [/\btoguideoursolution\b/gi, 'to guide our solution'],
+  [/\bSimplifythefraction\b/gi, 'Simplify the fraction'],
+  [/\bThetotalnumberofstudentswhodidnotbuyfoodis\b/gi, 'The total number of students who did not buy food is'],
+  [/\bThetotalnumberofstudents\b/gi, 'The total number of students'],
+  [/\bStudentswhodidnotbuyfoodanddidnotparticipateingames\b/gi, 'Students who did not buy food and did not participate in games'],
+  [/\bStudentswhodidnotbuyfoodbutparticipatedingames\b/gi, 'Students who did not buy food but participated in games'],
+  [/\bStudentswhodidnotbuyfood\b/gi, 'Students who did not buy food'],
+  [/\bTheprobabilityisgivenbytheformula\b/gi, 'The probability is given by the formula'],
+  [/\bcalculatetheprobabilitythatastudentselectedatrandomdidnotbuyfood\b/gi, 'calculate the probability that a student selected at random did not buy food'],
+  [/\btheprobabilitythatastudentselectedatrandomdidnotbuyfoodis\b/gi, 'the probability that a student selected at random did not buy food is'],
+  [/\bTherefore,theprobabilitythatastudentselectedatrandomdidnotbuyfoodis\b/gi, 'Therefore, the probability that a student selected at random did not buy food is'],
 ];
 
 
@@ -28,9 +66,18 @@ const LATEX_SYMBOL_COMMANDS = [
 
 const MATH_PLACEHOLDER_PREFIX = '\uE000MATH';
 const MATH_PLACEHOLDER_SUFFIX = '\uE001';
+const LINEAR_EQ_PREFIX = '\uE006LEQ';
+const LINEAR_EQ_SUFFIX = '\uE007';
+const MATH_EXPR_PREFIX = '\uE009MEX';
+const MATH_EXPR_SUFFIX = '\uE00A';
+const LATEX_WORD_TOKEN = '\uE00BLTX';
 
 // Unicode and LaTeX multiplication markers used in model output.
-const MUL_MARKERS = '(?:×|⋅|·|\\times|\\cdot|times|cdot)';
+// In RegExp source strings, LaTeX commands need doubled backslashes: `\cdot` -> `\\cdot`.
+const MUL_MARKERS = '(?:×|⋅|·|\\\\times|\\\\cdot|(?<!\\\\)\\\\btimes\\\\b|(?<!\\\\)\\\\bcdot\\\\b)';
+
+// Regex literal for tokens that should be normalized to \cdot (not already-correct \cdot).
+const MUL_MARKERS_RE = /(?:×|⋅|·|(?<!\\)\\times|(?<!\\)\btimes\b|(?<!\\)\bcdot\b)/g;
 
 const PROSE_LINE_WORDS = /\b(the|and|using|given|calculate|substitute|formula|each|these|into|find|total|separately|values|dimensions|inches|square|area|prism|rectangular|right|can|be|with|this|from|for|together|term|using|breakdown|step|surface|using)\b/i;
 
@@ -96,7 +143,154 @@ export function repairSplitProseArtifacts(text) {
     .replace(/\ban\s+swer\b/gi, 'answer')
     .replace(/\bnu\s+mber\b/gi, 'number')
     .replace(/\bpro\s+bability\b/gi, 'probability')
-    .replace(/\bred\s+tiles\b/gi, 'red tiles');
+    .replace(/\bred\s+tiles\b/gi, 'red tiles')
+    .replace(/\bLa\s+Te\s+X\b/gi, 'LaTeX')
+    .replace(/\bHow ever\b/gi, 'However')
+    .replace(/\bNoneof\b/gi, 'None of');
+}
+
+export function repairLinearEquationCheckProse(text) {
+  let s = String(text || '')
+    .replace(/\u2212/g, '-')
+    .replace(/−/g, '-');
+
+  // Restore split numbered steps: (incorrect)\n2\n. For -> (incorrect)\n\n2. For
+  s = s.replace(
+    /\((correct|incorrect)\)\s*\n+\s*(\d+)\s*\n+\s*\.\s*/gi,
+    '($1)\n\n$2. '
+  );
+  s = s.replace(
+    /\(incorrect\)\s*\n+\s*(\d+)\s*\n+\s*\.\s*For\s*\n+\s*the equation/gi,
+    '(incorrect)\n\n$1. For the equation'
+  );
+
+  // Undo false exponent merge on result labels before the next equation step.
+  s = s.replace(
+    /\((correct|incorrect)\)\^(\d+)\s*\.\s*(?=For\b)/gi,
+    '($1)\n\n$2. '
+  );
+
+  // Split glued point-check lines: Whenx=1,y=1+3=4(correct)
+  s = s.replace(
+    /[−-]?\s*Whenx\s*=\s*(\d+)\s*,\s*y\s*=\s*(.+?)\((correct|incorrect)\)/gi,
+    '\nWhen x=$1, y=$2 ($3)'
+  );
+
+  // Partially spaced variants produced by prose normalization.
+  s = s.replace(
+    /[−-]\s*Whenx\s*=\s*(\d+)\s*,\s*y\s*=\s*(.+?)\((correct|incorrect)\)/gi,
+    '\nWhen x=$1, y=$2 ($3)'
+  );
+
+  s = s.replace(/\bWhenx\b/gi, 'When x');
+  s = s.replace(/,y\s*=/g, ', y=');
+  s = s.replace(/(\d)\((correct|incorrect)\)/gi, '$1 ($2)');
+  s = s.replace(/\((correct|incorrect)\)([A-Za-z])/gi, '($1) $2');
+  s = s.replace(/\((correct|incorrect)\)\s+(\d+\.\s*For the equation)/gi, '($1)\n\n$2');
+  s = s.replace(/\bNoneof\b/gi, 'None of');
+  s = s.replace(/\bNone of\s*\n+\s*the equations\b/gi, 'None of the equations');
+  s = s.replace(/\bHow ever\b/gi, 'However');
+  s = s.replace(/\bFor\s*\n+\s*the equation\b/gi, 'For the equation');
+  s = s.replace(/(\d+)\s*\n+\s*\.\s*For\s*\n+\s*the equation/gi, '$1. For the equation');
+  s = s.replace(/(\((?:correct|incorrect)\))\s+(When x=)/gi, '$1\n$2');
+  s = s.replace(/(?<!\n)(?<!\d)\.(?<=\d)\s+(When x=)/g, '.\n$1');
+  s = s.replace(/(?<!\n)(?<!\d)\s+(When x=)/g, '\n$1');
+
+  return s;
+}
+
+function isMathEquationFragmentLine(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return false;
+  if (/\b[a-zA-Z]{4,}\b/.test(trimmed)) return false;
+  return /^[+\-−]?[\d\s+\-*^()xyrk=.\u2212−]+$/i.test(trimmed);
+}
+
+function endsMathEquationBlock(line) {
+  const trimmed = String(line || '').trim();
+  return /=\s*-?\d+(?:\.\d+)?\s*$/.test(trimmed)
+    || /=\s*[A-Za-z][\w^]*\s*\.?\s*$/.test(trimmed);
+}
+
+function joinMultilineEquations(text) {
+  const lines = String(text || '').split('\n');
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (!isMathEquationFragmentLine(lines[i])) {
+      out.push(lines[i]);
+      i += 1;
+      continue;
+    }
+
+    let j = i;
+    while (j < lines.length && isMathEquationFragmentLine(lines[j])) j += 1;
+    const block = lines.slice(i, j);
+    const last = block[block.length - 1] || '';
+    if (endsMathEquationBlock(last)) {
+      out.push(block.join(' ').replace(/\s{2,}/g, ' ').trim());
+    } else {
+      out.push(...block);
+    }
+    i = j;
+  }
+
+  return out.join('\n');
+}
+
+// Rejoin model/OCR artifacts that split exponents across lines or spaces,
+// e.g. "x\n8 y\n2" -> "x^8 y^2", "9x\n2" -> "9x^2", and "(x-h) 2" -> "(x-h)^2".
+export function repairSplitExponents(text) {
+  let s = String(text || '')
+    .replace(/\u2212/g, '-')
+    .replace(/−/g, '-');
+  let prev = '';
+  let guard = 0;
+
+  while (prev !== s && guard < 8) {
+    prev = s;
+    guard += 1;
+    // Caret split across a line break: x^\n8 -> x^8
+    s = s.replace(/([A-Za-z0-9)])\s*\^\s*\n+\s*(\d+)/g, '$1^$2');
+    // Coefficient + variable + line break + exponent: 9x\n2 -> 9x^2
+    s = s.replace(
+      /(?<![A-Za-z])(\d*)([A-Za-z])\s*\n+\s*(\d+)(?=[^0-9]|$)/g,
+      (_m, coef, variable, exp) => `${coef}${variable}^${exp}`
+    );
+    // Parenthesized base + line break + exponent: (x-h)\n2 -> (x-h)^2
+    s = s.replace(
+      /(\((?!correct|incorrect)[^)]+\))\s*\n+\s*(\d+)(?=[^0-9+\-]|$)/g,
+      (_m, base, exp) => `${base}^${exp}`
+    );
+    // Single-letter variable + line break + exponent digits: x\n8 -> x^8
+    s = s.replace(
+      /(^|[^A-Za-z0-9])([A-Za-z])\s*\n+\s*(\d+)(?=[^0-9]|$)/g,
+      (_m, lead, variable, exp) => `${lead}${variable}^${exp}`
+    );
+    // Parenthesized base + spaced exponent in math: (x-h) 2 + -> (x-h)^2 +
+    s = s.replace(
+      /(\((?!correct|incorrect)[^)]+\))\s+(\d+)(?=\s*[+\-=)]|$)/g,
+      (_m, base, exp) => `${base}^${exp}`
+    );
+    // Coefficient + variable + spaced exponent: 9x 2 + -> 9x^2 + (requires digit before letter)
+    s = s.replace(
+      /(\d)([A-Za-z])\s+(\d+)(?=\s*[+\-=]|$)/g,
+      (_m, coef, variable, exp) => `${coef}${variable}^${exp}`
+    );
+    // Spaced exponent in math-like sequences: "6 x 8 y" -> "6 x^8 y"
+    s = s.replace(
+      /(^|[^A-Za-z0-9\\])([A-Za-z])\s+(\d+)(?=\s*[A-Za-z(\-+*/=]|$)/g,
+      (_m, lead, variable, exp) => `${lead}${variable}^${exp}`
+    );
+    // Radius-style spaced exponent after equals: =r 2 . -> =r^2 .
+    s = s.replace(
+      /=\s*([A-Za-z])\s+(\d+)(?=\s*[.)]|$)/g,
+      (_m, variable, exp) => `=${variable}^${exp}`
+    );
+  }
+
+  return joinMultilineEquations(s);
 }
 
 function readBalancedBraces(str, startIndex) {
@@ -175,6 +369,198 @@ export function repairBrokenFractionSyntax(text) {
   return s;
 }
 
+export function repairTutorChatGluedProse(text) {
+  let s = String(text || '')
+    .replace(/\u2212/g, '-')
+    .replace(/−/g, '-');
+  for (const [pattern, replacement] of TUTOR_CHAT_GLUE_PHRASES) {
+    s = s.replace(pattern, replacement);
+  }
+  return s;
+}
+
+function protectLinearEquationLines(text) {
+  const regions = [];
+  const out = String(text || '').replace(
+    /\by\s*=\s*(?:\\?\([^)]*\\?\)|[^\n|A-Z]+)/gi,
+    (match) => {
+      const id = regions.length;
+      regions.push(match);
+      return `${LINEAR_EQ_PREFIX}${id}${LINEAR_EQ_SUFFIX}`;
+    }
+  );
+  return { out, regions };
+}
+
+function restoreLinearEquationLines(text, regions) {
+  return String(text || '').replace(
+    new RegExp(`${LINEAR_EQ_PREFIX}(\\d+)${LINEAR_EQ_SUFFIX}`, 'g'),
+    (_m, id) => regions[Number(id)] ?? ''
+  );
+}
+
+function isMathExpressionLine(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed || !/=/.test(trimmed)) return false;
+  if (/^#{1,6}\s/.test(trimmed)) return false;
+  const mathChars = (trimmed.match(/[\d=+\-*^()[\]\\/]|\\frac|\\sqrt|[xyrk]/gi) || []).length;
+  const proseWords = (trimmed.match(/\b[a-zA-Z]{4,}\b/g) || []).length;
+  if (mathChars >= 4 && mathChars >= proseWords * 2) return true;
+  return /^\s*[\d(+-]*\d*[A-Za-z][\s\S]*=\s*[\d(+-]/.test(trimmed);
+}
+
+function protectMathExpressionLines(text) {
+  const regions = [];
+  const out = String(text || '').replace(/^[^\n]+$/gm, (line) => {
+    if (!isMathExpressionLine(line)) return line;
+    const id = regions.length;
+    regions.push(line.replace(/\s*\n+\s*/g, ' ').trim());
+    return `${MATH_EXPR_PREFIX}${id}${MATH_EXPR_SUFFIX}`;
+  });
+  return { out, regions };
+}
+
+function restoreMathExpressionLines(text, regions) {
+  return String(text || '').replace(
+    new RegExp(`${MATH_EXPR_PREFIX}(\\d+)${MATH_EXPR_SUFFIX}`, 'g'),
+    (_m, id) => regions[Number(id)] ?? ''
+  );
+}
+
+function stripTutorMarkdownHeadings(text) {
+  return String(text || '')
+    .replace(/\s*#{1,6}\s+/g, '\n')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1');
+}
+
+export function repairLinearEquationText(text) {
+  return wrapLinearEquations(repairLinearEquationStructure(text));
+}
+
+function repairLinearEquationStructure(text) {
+  let s = String(text || '')
+    .replace(/\u2212/g, '-')
+    .replace(/−/g, '-')
+    .replace(/[\u200b\ufeff\u00ad\u2032]/g, '');
+
+  // Split glued prose immediately after an equation: y=3x-2Let -> y=3x-2 Let
+  s = s.replace(/(\by\s*=[^A-Z\n|]{1,60}?)(?=[A-Z][a-z])/g, '$1 ');
+
+  // Stacked coefficient before x in y = \n2\n1\n x+3
+  s = s.replace(
+    /\by\s*=\s*(?:\\?\(\s*)?\n*(\d+)\s*\n+\s*(\d+)\s*\n+\s*x([+\-\d]*)/gi,
+    (_m, top, bottom, tail) => {
+      const num = Number(bottom) < Number(top) ? bottom : top;
+      const den = Number(bottom) < Number(top) ? top : bottom;
+      return `\\(y=\\frac{${num}}{${den}}x${tail}\\)`;
+    }
+  );
+
+  // Merge detached stacked fraction with the x term.
+  s = s.replace(
+    /\by\s*=\s*(?:\\?\(\s*)?\\frac\{(\d+)\}\{(\d+)\}\s*(?:\\?\)\s*)?\s*([+\-]?\s*x[+\-\d]*)/gi,
+    (_m, num, den, tail) => `\\(y=\\frac{${num}}{${den}}${tail.replace(/\s+/g, '')}\\)`
+  );
+
+  // Rejoin spurious spaces inside coefficients: y= 2 x+1 -> y=2x+1
+  s = s.replace(/\by\s*=\s*(-?\d+)\s+([xy])(?=[+\-]?\d)/gi, (_m, coef, variable) => `y=${coef}${variable}`);
+  s = s.replace(/\by\s*=\s*(-?\d+)\s+([xy])\b/gi, (_m, coef, variable) => `y=${coef}${variable}`);
+
+  return s;
+}
+
+function wrapLinearEquations(text) {
+  return applyOutsideMathRegions(String(text || ''), chunk =>
+    chunk.replace(
+      /\by\s*=\s*([^\n|]+?)(?=\s*(?:\||$|\n|[.;]|Let\b|First\b|Which\b|The\b|Table\b|Substitute\b))/gi,
+      (match, expr) => {
+        const cleaned = expr.trim().replace(/[ \t]+/g, '').replace(/\n+/g, '');
+        if (!cleaned || cleaned.length > 48) return match;
+        if (!/^[-+\\(\d\\fracxy\d\{\}\^.)]+$/i.test(cleaned)) return match;
+        return `\\(y=${cleaned}\\)`;
+      }
+    )
+  );
+}
+
+function isLikelyAnswerChoicesBlock(content) {
+  const s = String(content || '').trim();
+  if (!s) return false;
+  if (/\|/.test(s)) {
+    const parts = s.split(/\|/).map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2 && parts.every(p => p.length <= 80)) return true;
+  }
+  if (/^\s*y\s*=/.test(s) && s.includes('|') && s.split(/\|/).every(p => /^\s*y\s*=/.test(p.trim()))) return true;
+  if (s.length > 120) return false;
+  if (/[.?!]/.test(s) && s.length > 40) return false;
+  if (/\b(students|probability|therefore|simplify|formula)\b/i.test(s) && s.length > 30) return false;
+  return /^[\d\s.\\()+\-*/^_{}\s,|]+$/.test(s) || s.length <= 40;
+}
+
+export function repairMisplacedAnswerChoicesMarker(text) {
+  return String(text || '').replace(/Answer choices:\s*/gi, (match, offset, whole) => {
+    const rest = whole.slice(offset + match.length);
+    const nextBreak = rest.search(/\n{2,}/);
+    const block = (nextBreak === -1 ? rest : rest.slice(0, nextBreak)).trim();
+    if (isLikelyAnswerChoicesBlock(block)) return match;
+    return 'Given values: ';
+  });
+}
+
+export function repairTableProbabilityGluedProse(text) {
+  let s = String(text || '');
+  for (const [pattern, replacement] of TABLE_PROBABILITY_GLUE_PHRASES) {
+    s = s.replace(pattern, replacement);
+  }
+  s = s
+    .replace(/(\d)(Thetotalnumberofstudentswhodidnotbuyfoodis)/gi, '$1. The total number of students who did not buy food is')
+    .replace(/(\d)(Thetotalnumberofstudents)/gi, '$1. The total number of students')
+    .replace(/to guide our solution\)\s*:?/gi, 'to guide our solution:')
+    .replace(/(\d+)−(?=[A-Za-z(])/g, '$1\n- ')
+    .replace(/(?:^|[\n:])\s*−\s*(?=[A-Za-z(])/gm, '\n- ')
+    .replace(/([:;])\s*−\s*(?=[A-Za-z(])/g, '$1 - ');
+  return s;
+}
+
+// Convert model/OCR stacked numeric fractions like "300\n135" -> \frac{135}{300}.
+export function repairStackedFractionLines(text) {
+  const marker = /Answer choices:\s*/i;
+  const match = String(text || '').match(marker);
+  if (match) {
+    const tail = text.slice(match.index);
+    if (isLikelyAnswerChoicesBlock(tail.slice(match[0].length).trim())) {
+      return repairStackedFractionLines(text.slice(0, match.index)) + tail;
+    }
+  }
+
+  let s = String(text || '');
+  let prev = '';
+  let guard = 0;
+
+  while (prev !== s && guard < 8) {
+    prev = s;
+    guard += 1;
+    s = s.replace(
+      /([=:\s]|^|\n)(\d{1,5})\s*\n+\s*(\d{1,5})(?=\s*(?:\n|\.|,|;|:|\)|$|\s*=|\s*Therefore|\s*Next|\s*Simplify))/gim,
+      (match, lead, top, bottom, offset, whole) => {
+        const a = Number(top);
+        const b = Number(bottom);
+        if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return match;
+        if (a <= 20 && b <= 20) {
+          const before = whole.slice(Math.max(0, offset - 48), offset);
+          if (!/[=]|Simplify|fraction|probability|\by\s*=\s*$/im.test(before)) return match;
+        }
+        const num = b < a ? b : a;
+        const den = b < a ? a : b;
+        return `${lead}\\(\\frac{${num}}{${den}}\\)`;
+      }
+    );
+  }
+
+  return s;
+}
+
 export function repairCorruptLatexTokens(text) {
   if (!text || typeof text !== 'string') return text;
   let s = String(text || '');
@@ -186,17 +572,10 @@ export function repairCorruptLatexTokens(text) {
   //  "24×5" -> "2(4)(5)"
   //  "2 4⋅5" -> "2(4)(5)"
   const mul = MUL_MARKERS;
-  s = s.replace(new RegExp(`\\b2\\s*([0-9])\\s*${mul}\\s*([0-9]+)\\b`, 'g'), '2($1)($2)');
-  s = s.replace(new RegExp(`\\b2([0-9])\\s*${mul}\\s*([0-9]+)\\b`, 'g'), '2($1)($2)');
-  // Parenthesized inner products: "2(4⋅6)" -> "2(4 \cdot 6)"
-  s = s.replace(new RegExp(`\\(([0-9]+)\\s*${mul}\\s*([0-9]+)\\)`, 'g'), '($1 \\cdot $2)');
-
-  // Surface-area formula spacing: "2 lw + 2 lh + 2 wh" -> "2(lw + lh + wh)"
-  s = s.replace(/\b2\s*l\s*w\s*\+\s*2\s*l\s*h\s*\+\s*2\s*w\s*h\b/gi, '2(lw + lh + wh)');
 
   // Surface-area substitution corruption: glued coefficient digits in a sum of
   // three face products, e.g. "2 4⋅5 + 24⋅6 + 25⋅6" -> "2(4 \cdot 5 + 4 \cdot 6 + 5 \cdot 6)".
-  // Must run before per-term splitting so the full sum is captured first.
+  // Run before per-term splitting so the full sum is captured first.
   s = s.replace(
     new RegExp(
       `2\\s*(\\d+)\\s*${mul}\\s*(\\d+)\\s*\\+\\s*2(\\d)\\s*${mul}\\s*(\\d+)\\s*\\+\\s*2(\\d)\\s*${mul}\\s*(\\d+)`,
@@ -204,6 +583,20 @@ export function repairCorruptLatexTokens(text) {
     ),
     (_m, a, b, c, d, e, f) => `2(${a} \\cdot ${b} + ${c} \\cdot ${d} + ${e} \\cdot ${f})`
   );
+
+  // Handle numeric-concatenation corruption like "24×5" or "2 4⋅5" where
+  // the model accidentally glued a coefficient digit to the next dimension.
+  // Do this before normalizing the multiplication sign so we catch both forms.
+  // Examples:
+  //  "24×5" -> "2(4)(5)"
+  //  "2 4⋅5" -> "2(4)(5)"
+  s = s.replace(new RegExp(`\\b2\\s*([0-9])\\s*${mul}\\s*([0-9]+)\\b`, 'g'), '2($1)($2)');
+  s = s.replace(new RegExp(`\\b2([0-9])\\s*${mul}\\s*([0-9]+)\\b`, 'g'), '2($1)($2)');
+  // Parenthesized inner products: "2(4⋅6)" -> "2(4 \cdot 6)"
+  s = s.replace(new RegExp(`\\(([0-9]+)\\s*${mul}\\s*([0-9]+)\\)`, 'g'), '($1 \\cdot $2)');
+
+  // Surface-area formula spacing: "2 lw + 2 lh + 2 wh" -> "2(lw + lh + wh)"
+  s = s.replace(/\b2\s*l\s*w\s*\+\s*2\s*l\s*h\s*\+\s*2\s*w\s*h\b/gi, '2(lw + lh + wh)');
 
   // Consolidate already-split face products: "2(4)(5) + 2(4)(6) + 2(5)(6)".
   s = s.replace(
@@ -213,7 +606,7 @@ export function repairCorruptLatexTokens(text) {
 
   // Convert remaining multiplication markers to \cdot for a cleaner look
   // in LaTeX (less visually heavy than \times in many contexts).
-  s = s.replace(/(?:×|⋅|·|\\times|\btimes\b)/g, '\\cdot ');
+  s = s.replace(MUL_MARKERS_RE, '\\cdot ');
 
   // Generic literal "\t\command" corruption from local models / JSON
   s = s.replace(/\\t\\(?=[A-Za-z])/g, '\\');
@@ -285,7 +678,12 @@ export function repairProbabilityNotation(text) {
 export function convertPlainNumericFractions(text) {
   return String(text || '').replace(
     /(^|[\s=:(\[,]|or\s)(\d+)\s*\/\s*(\d+)(?=$|[\s.,;:!?)}\]]|\b)/g,
-    (_m, prefix, num, den) => `${prefix}\\(\\frac{${num}}{${den}}\\)`
+    (match, prefix, num, den, offset, whole) => {
+      const before = whole.slice(0, offset);
+      // Preserve UI counters like "Hint 1/3:" from becoming stacked fractions.
+      if (/\bHint\s+$/i.test(before + prefix)) return match;
+      return `${prefix}\\(\\frac{${num}}{${den}}\\)`;
+    }
   );
 }
 
@@ -423,7 +821,7 @@ export function repairTutorLatex(text) {
   // Also handle compact same-line patterns that often appear in choices, e.g.
   // "Answer choices: 8 6 | 4 74 | 48 | 1,184" -> "8\\sqrt{6} | 4\\sqrt{74} | 48 | 1,184".
   // Only do this for short coefficients (<=20) to stay conservative.
-  s = s.replace(/(Answer choices:\s*|\b|\|)\s*(\d{1,2})\s+([0-9]{1,4}(?:\.[0-9]+)?)(?=(?:\s|\||$))/gi, (m, pfx, coef, rad) => {
+  s = s.replace(/(Answer choices:\s*|\|)\s*(\d{1,2})\s+([0-9]{1,4}(?:\.[0-9]+)?)(?=(?:\s|\||$))/gi, (m, pfx, coef, rad) => {
     const c = Number(coef);
     if (!Number.isFinite(c) || c <= 0 || c > 20) return m;
     return (pfx || '') + c + "\\sqrt{" + rad.replace(/,/g, '') + "}";
@@ -609,6 +1007,8 @@ export function normalizeProseSpacing(text) {
   let s = String(text || '').trim();
   if (!s) return s;
 
+  s = s.replace(/\bLaTeX\b/gi, LATEX_WORD_TOKEN);
+
   const repairGluedPhrases = value => value
     .replace(/\bforeach\b/gi, 'for each')
     .replace(/\bforeach(?=[A-Za-z])/gi, 'for each ')
@@ -628,7 +1028,7 @@ export function normalizeProseSpacing(text) {
     .replace(/([,.;:?])(?=[A-Za-z0-9])/g, '$1 ')
     .replace(/([a-z])(\d)/g, '$1 $2')
     .replace(/(\d)([a-zA-Z])/g, '$1 $2')
-    .replace(/([°′'])/g, ' $1')
+    .replace(/([°′])/g, ' $1')
     .replace(/△/g, ' △ ')
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u200b\u200c\u200d\ufeff]/g, '');
 
@@ -657,6 +1057,8 @@ export function normalizeProseSpacing(text) {
     .replace(/\s{2,}/g, ' ')
     .trim();
 
+  s = s.replace(new RegExp(LATEX_WORD_TOKEN, 'g'), 'LaTeX');
+
   return repairSplitProseArtifacts(s);
 }
 
@@ -677,13 +1079,55 @@ export function stripMathDelimitersFromExpression(value) {
 
 export function repairTutorContent(text) {
   let s = repairLatexEscapeDamage(String(text || '').trim());
-  s = repairSplitProseArtifacts(normalizeProseSpacing(s));
+  s = repairLinearEquationCheckProse(s);
+  s = repairSplitExponents(s);
+  s = repairTableProbabilityGluedProse(s);
+  s = repairLinearEquationStructure(s);
+  s = repairTutorChatGluedProse(s);
+  s = repairMisplacedAnswerChoicesMarker(s);
+  s = repairStackedFractionLines(s);
+  s = repairSplitExponents(s);
+  const { out: protectedText, regions: linearEqRegions } = protectLinearEquationLines(s);
+  const { out: mathProtected, regions: mathExprRegions } = protectMathExpressionLines(protectedText);
+  s = repairSplitExponents(mathProtected);
+  s = repairLinearEquationCheckProse(repairSplitProseArtifacts(normalizeProseSpacing(s)));
+  s = restoreMathExpressionLines(s, mathExprRegions);
+  s = restoreLinearEquationLines(s, linearEqRegions);
+  s = repairSplitExponents(s);
+  s = stripTutorMarkdownHeadings(s);
   s = repairTutorLatex(s);
+  s = wrapLinearEquations(s);
   return s;
 }
 
 export function sanitizeTutorText(text) {
-  return finalizeTutorMath(repairTutorContent(text));
+  return repairLinearEquationCheckProse(finalizeTutorMath(repairTutorContent(text)));
+}
+
+function isTutorPointCheckLine(line) {
+  const trimmed = String(line || '').trim();
+  return /^-?\s*When x\s*=/i.test(trimmed)
+    || /^\d+\.\s*For the equation/i.test(trimmed)
+    || /\bNone of the equations\b/i.test(trimmed);
+}
+
+function isStandaloneEquationLine(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed || !/=/.test(trimmed)) return false;
+  if (/^\s*=/.test(trimmed)) return false;
+  if (/\\\(|\\\[|\$\$/.test(trimmed)) return false;
+  if (isProseLine(trimmed)) return false;
+  if (isTutorPointCheckLine(trimmed)) return false;
+  return /^[\d([+−-]|[A-Za-z]\s*=/.test(trimmed);
+}
+
+function wrapStandaloneEquations(text) {
+  return String(text || '').split(/\n/).map(line => {
+    const trimmed = line.trim();
+    if (!isStandaloneEquationLine(trimmed)) return line;
+    const expr = stripMathDelimitersFromExpression(trimmed);
+    return `\\[${expr}\\]`;
+  }).join('\n');
 }
 
 export function finalizeTutorMath(text) {
@@ -691,6 +1135,7 @@ export function finalizeTutorMath(text) {
   s = mergeAdjacentInlineMath(s);
   s = wrapEquationChains(s);
   s = wrapBareLatexCommands(s);
+  s = wrapStandaloneEquations(s);
   // Wrap simple superscripts into inline LaTeX before further merging so
   // merge logic treats them as math regions.
   s = wrapSimpleSuperscripts(s);
@@ -706,9 +1151,15 @@ export function finalizeTutorMath(text) {
   s = wrapSimpleSuperscripts(s);
   // Merge coefficient + partially wrapped sqrt tokens: 8\(\sqrt{6}\) -> \(8\sqrt{6}\)
   s = coalescePartialInlineMath(s);
+  s = s.replace(
+    /\\\((correct|incorrect)\)\^\{(\d+)\}\\\)\s*\.\s*(?=For the equation)/gi,
+    '($1).\n\n$2. For the equation'
+  );
   // Prettify step-by-step fragments by ensuring equation-like lines are
   // placed on their own lines and wrapped as display math for readability.
   s = prettifyStepByStep(s);
+  // Wrap any remaining bare LaTeX-in-parens fragments missed by prose heuristics.
+  s = wrapBareLatexParentheses(s);
   s = repairAlignedEnvironmentLineBreaks(s);
   return s;
 }
@@ -736,7 +1187,8 @@ function inlineWrapMathInProseLine(line) {
       const units = expr.match(/\s+(square\s+inches?|sq\.?\s*in\.?|cubic\s+inches?|cm\^?2?|units?)\s*$/i);
       const numExpr = units ? expr.slice(0, units.index).trim() : expr.trim();
       const unitSuffix = units ? ` ${units[1]}` : '';
-      return `${label} = \\(${stripMathDelimitersFromExpression(numExpr)}\\)${unitSuffix}`;
+      const repaired = repairCorruptLatexTokens(numExpr);
+      return `${label} = \\(${stripMathDelimitersFromExpression(repaired)}\\)${unitSuffix}`;
     }
   );
 
@@ -749,9 +1201,16 @@ function inlineWrapMathInProseLine(line) {
     }
   );
 
+  // Circle standard form embedded in prose: (x-h)^2 +(y-k)^2 =r^2
+  s = s.replace(
+    /\(([xy])-([A-Za-z])\)\^(\d+)\s*\+\s*\(([xy])-([A-Za-z])\)\^(\d+)\s*=\s*([A-Za-z])\^(\d+)/g,
+    (_m, x1, h, e1, x2, k, e2, r, e3) =>
+      `\\((${x1}-${h})^{${e1}} + (${x2}-${k})^{${e2}} = ${r}^{${e3}}\\)`
+  );
+
   // Standalone calculation equalities embedded in prose (e.g. totals at end of a sentence)
   s = s.replace(
-    /(?<![\\(])(\d+(?:\s*\\cdot\s*\d+|\([^)]+\))(?:\s*\+\s*\d+(?:\s*\\cdot\s*\d+|\([^)]+\)))*\s*=\s*\d+)/g,
+    /(?<![\\(])(\d+(?:\s*\\cdot\s*\d+|\([^)]+\))(?:\s*\+\s*\d+(?:\s*\\cdot\s*\d+|\([^)]+\)))*\s*=\s*\d+)(?!\s*\((?:correct|incorrect)\))/g,
     (match) => `\\(${stripMathDelimitersFromExpression(match.trim())}\\)`
   );
 
@@ -769,30 +1228,41 @@ function isEquationLine(line) {
   const trimmed = String(line || '').trim();
   if (!trimmed || /\\\(|\\\[|\$\$/.test(trimmed)) return false;
   if (isProseLine(trimmed)) return false;
+  if (isTutorPointCheckLine(trimmed)) return false;
   return /=|\^|\\sqrt|\\cdot|\\times/.test(trimmed) || /^\s*[A-Za-z]\s*=/.test(trimmed);
 }
 
 function extractAnswerChoicesBlock(text) {
   const match = String(text || '').match(/\n?\s*Answer choices:\s*([\s\S]*)$/i);
   if (!match) return { body: text, answerChoices: null };
+  const candidate = match[1].trim();
+  if (!isLikelyAnswerChoicesBlock(candidate)) return { body: text, answerChoices: null };
   const body = text.slice(0, match.index).trimEnd();
-  return { body, answerChoices: match[1].trim() };
+  return { body, answerChoices: candidate };
 }
 
 function coalescePartialInlineMath(text) {
   return applyOutsideMathRegions(String(text || ''), chunk =>
-    chunk.replace(/(\d+)\\\(([^()\\\n]+)\\\)/g, '\\($1$2\\)')
+    chunk
+      .replace(/(\d+)\\\((\\sqrt\{[^}]+\})\\\)/g, '\\($1$2\\)')
+      .replace(/(\d+)\\\(([^()\\\n]+)\\\)/g, (_m, coef, inner) => {
+        if (/\\cdot|\\times|[+\-]/.test(inner)) return `\\(${coef}(${inner})\\)`;
+        return `\\(${coef}${inner}\\)`;
+      })
   );
 }
 
 function collapseSplitAnswerChoiceText(rest) {
   let s = String(rest || '');
+  s = repairSplitExponents(s);
+  s = repairLinearEquationStructure(s);
   // Normalize pipe separators split across lines.
   s = s.replace(/\|\s*\n+\s*/g, ' | ');
   // Join coefficient/radicand pairs split across lines: "8\n6" -> "8 6".
-  s = s.replace(/(\b\d{1,2})\s*\n+\s*(\d{1,4}(?:\.\d+)?)\b/g, '$1 $2');
-  // Join thousands split across tokens: "1,\n184" or "1\n184" -> "1,184".
-  s = s.replace(/(\b\d{1,3}),?\s*\n+\s*(\d{3})\b/g, '$1,$2');
+  // Skip stacked fractions in linear equations like "2\n1\n x+3".
+  s = s.replace(/(\b\d{1,2})\s*\n+\s*(\d{1,4}(?:\.\d+)?)\b(?!\s*\n*\s*x)/g, '$1 $2');
+  // Join thousands split across tokens when a comma is present: "1,\n184" -> "1,184".
+  s = s.replace(/(\b\d{1,3}),\s*\n+\s*(\d{3})\b/g, '$1,$2');
   // Collapse remaining newlines inside the choices block to spaces.
   s = s.replace(/\n+/g, ' ');
   // Merge inline split sqrt tokens before delimiter split.
@@ -852,11 +1322,10 @@ function repairAlignedEnvironmentLineBreaks(text) {
   );
 }
 function normalizeChoiceToken(token) {
-  const t = String(token || '').trim();
+  let t = coalescePartialInlineMath(wrapLinearEquations(repairTutorContent(String(token || '').trim())));
   if (!t) return t;
-  if (/^\\\([\s\S]*\\\)$/.test(t)) return t;
-  const partial = t.match(/^(\d+)?\\\(([\s\S]+)\\\)$/);
-  if (partial) return `\\(${partial[1] || ''}${partial[2]}\\)`;
+  if (/^\\\([\s\S]*\\\)$/.test(t) && !/\\\(/.test(t.slice(2, -2))) return t;
+
   const splitSqrt = t.match(/^([0-9]{1,3})[\s,]+([0-9]{1,4}(?:\.[0-9]+)?)$/);
   if (splitSqrt) {
     const g1 = splitSqrt[1].replace(/,/g, '');
@@ -866,7 +1335,16 @@ function normalizeChoiceToken(token) {
     }
     return `\\(${g1}\\sqrt{${g2}}\\)`;
   }
-  if (/\\sqrt|\{|\}/.test(t)) return `\\(${t.replace(/\s+/g, ' ')}\\)`;
+
+  if (/\\sqrt|\^|[A-Za-z]\^{|\([A-Za-z0-9\\]|[A-Za-z0-9]\s*\^|\by\s*=/.test(t)) {
+    if (/^\\\(\s*y\s*=/.test(t)) return t.replace(/\by\s*=\s*/g, 'y=');
+    const inner = stripMathDelimitersFromExpression(t)
+      .replace(/([A-Za-z0-9()]+)\^\{?(\d+)\}?/g, '$1^{$2}')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return `\\(${inner}\\)`;
+  }
+
   if (/^[0-9,]+$/.test(t)) return `\\(${t.replace(/,/g, '')}\\)`;
   return t;
 }
@@ -977,6 +1455,7 @@ export function prettifyStepByStep(text) {
   // earlier term, e.g. "x = y = z = y" -> "x = y = z" (remove adjacent duplicates)
   result = result.split('\n').map(line => {
     if (!line.includes('=')) return line;
+    if (isTutorPointCheckLine(line) || /\bWhen x\s*=/i.test(line)) return line;
     const parts = line.split('=');
     const clean = [];
     const norm = s => String(s || '').replace(/[\\()\[\]\s]/g, '');
@@ -1003,13 +1482,12 @@ export function prettifyStepByStep(text) {
 // Wrap simple superscript expressions outside protected math regions.
 export function wrapSimpleSuperscripts(text) {
   if (!text) return text;
-  return applyOutsideMathRegions(String(text), (chunk) => {
-    // Match a bare token (alphanumeric or parenthesized), a caret, then digits
-    // Ensure not preceded by a backslash (avoid LaTeX commands) and bounded
-    // by non-alphanumeric chars or string boundaries.
-    return chunk.replace(/(^|[^A-Za-z0-9\\])([A-Za-z0-9()]+)\^\{?(\d+)\}?(?=[^A-Za-z0-9\\]|$)/g,
-      (_m, lead, base, exp) => `${lead}\\(${base}^{${exp}}\\)`);
-  });
+  let s = applyOutsideMathRegions(String(text), chunk =>
+    chunk.replace(/(\((?!correct|incorrect)[^)]+\))\^(\d+)/g, '\\($1^{$2}\\)'));
+  s = applyOutsideMathRegions(s, chunk =>
+    chunk.replace(/(^|[^A-Za-z0-9\\-])([A-Za-z0-9()]+)\^\{?(\d+)\}?(?=[^A-Za-z0-9\\]|$)/g,
+      (_m, lead, base, exp) => `${lead}\\(${base}^{${exp}}\\)`));
+  return s;
 }
 
 export function sanitizeHintText(text) {
@@ -1022,13 +1500,23 @@ export function cleanupTutorMarkdown(value) {
     .replace(/__([^_\n]+)__/g, '$1')
     .replace(/^\s*#{1,6}\s+/gm, '')
     .replace(/^\s*[-*]\s+\*\*([^*\n]+):\*\*/gm, '$1:')
-    .replace(/([A-Za-z0-9)])\s*\n\s*([23])\s*\n\s*(?=[-+−])/g, '$1^{$2} ')
-    .replace(/([A-Za-z0-9)])\s*\n\s*([23])(?=\s*[-+−])/g, '$1^{$2}');
+    .replace(/([A-Za-z0-9)])\s*\n\s*(\d+)\s*\n\s*(?=[-+−])/g, '$1^{$2} ')
+    .replace(/([A-Za-z0-9)])\s*\n\s*(\d+)(?=\s*[-+−])/g, '$1^{$2}');
 }
 
 function applyOutsideMathRegions(text, transform) {
   const { out, regions } = protectMathRegions(String(text || ''));
   return restoreMathRegions(transform(out), regions);
+}
+
+function wrapBareLatexParentheses(text) {
+  return applyOutsideMathRegions(String(text || ''), chunk => chunk
+    .replace(/\(\(([^()\n]*)\)\)/g, (_m, inner) => `\\((${inner})\\)`)
+    .replace(/(\d+)\(([^()\n]*\\[a-zA-Z][^()]*)\)/g, (_m, coef, inner) => `\\(${coef}(${inner})\\)`)
+    .replace(/(?<!\\)(?<!\d)\(([^()\n]*?)\)(?!\))/g, (m, inner) => (
+      /\\[a-zA-Z]/.test(inner) ? `\\(${inner}\\)` : m
+    ))
+  );
 }
 
 export function normalizeMathDelimiters(text) {
@@ -1051,14 +1539,11 @@ export function normalizeMathDelimiters(text) {
   });
 
   out = applyOutsideMathRegions(out, chunk => chunk
-    .replace(/\(\(([^()\n]*)\)\)/g, (_m, inner) => `\\((${inner})\\)`)
     .replace(/(?<!\\)\[([^[\]\n]*?)\](?!\])/g, (m, inner) => (
       /\\[a-zA-Z]/.test(inner) ? `\\[${inner}\\]` : m
     ))
-    .replace(/(?<!\\)\(([^()\n]*?)\)(?!\))/g, (m, inner) => (
-      /\\[a-zA-Z]/.test(inner) ? `\\(${inner}\\)` : m
-    ))
   );
+  out = wrapBareLatexParentheses(out);
 
   return finalizeTutorMath(out);
 }

@@ -3,7 +3,7 @@
 // Chat: passes full canonical schema context to Stage 4 tutor
 
 import {
-  normalizeMathDelimiters,
+  sanitizeTutorText,
   stripMathDelimitersFromExpression,
   formatAnswerChoicesForDisplay,
   solutionIncludesAnswerChoices,
@@ -218,29 +218,38 @@ function renderMathFallback(element) {
   );
 }
 
+const MATH_SEGMENT_RE = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g;
+
+function flattenMathSegment(segment) {
+  // KaTeX auto-render cannot match delimiters split by <br> nodes.
+  return String(segment || '').replace(/\n+/g, ' ');
+}
+
 // Converts plain text to safe HTML, then renders math in-place.
 // Preserves newlines and escapes HTML special chars in both math and
 // non-math segments — entities like &lt; are restored to literal characters
 // by the browser's HTML parser before KaTeX reads the text nodes, so this
 // is required for any LaTeX containing <, >, or & (e.g. "y < x + 7").
 function textToSafeHtml(text) {
-  const normalized = normalizeMathDelimiters(String(text ?? ''));
+  const normalized = sanitizeTutorText(String(text ?? ''));
 
   // Split on LaTeX delimiters so math and non-math segments can both be
   // escaped, then handed to KaTeX as their decoded (unescaped) form.
   const parts = [];
-  // Matches $$...$$, \[...\], \(...\). Single dollars are currency in word problems.
-  const re = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g;
-  let last = 0, m;
-  while ((m = re.exec(normalized)) !== null) {
+  let last = 0;
+  let m;
+  MATH_SEGMENT_RE.lastIndex = 0;
+  while ((m = MATH_SEGMENT_RE.exec(normalized)) !== null) {
     if (m.index > last) {
-      parts.push(escapeHtml(normalized.slice(last, m.index)));
+      parts.push(escapeHtml(normalized.slice(last, m.index)).replace(/\n/g, '<br>'));
     }
-    parts.push(escapeHtml(m[0])); // escaped LaTeX — KaTeX reads the decoded text node
+    parts.push(escapeHtml(flattenMathSegment(m[0])));
     last = m.index + m[0].length;
   }
-  if (last < normalized.length) parts.push(escapeHtml(normalized.slice(last)));
-  return parts.join('').replace(/\n/g, '<br>');
+  if (last < normalized.length) {
+    parts.push(escapeHtml(normalized.slice(last)).replace(/\n/g, '<br>'));
+  }
+  return parts.join('');
 }
 
 // ─── Chat Helpers ─────────────────────────────────────────────────

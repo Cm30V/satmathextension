@@ -1,5 +1,5 @@
 # SAT Math Extension Tutor
-
+## if youre not running on mac just copy paste this "read me" to chatgpt for whatever youre on
 ## How to install for mac (run the commands in terminal)
 
 ### Download the zip file from this repo

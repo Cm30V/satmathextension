@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAT Tutor Agent</title>
+  <style>
+    :root {
+      --bg: #f5f5f0;
+      --surface: #ffffff;
+      --surface2: #f0f0e8;
+      --border: #111111;
+      --accent: #d4f95a;
+      --accent-dark: #a8d92a;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --text: #111111;
+      --muted: #6b6b66;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      padding: 0 0 16px;
+    }
+
+    .header {
+      background: var(--text);
+      border-bottom: 3px solid var(--border);
+      padding: 16px 20px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: #a8a8a0;
+      margin-top: 1px;
+    }
+
+    .section {
+      padding: 16px 20px 0;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .duration-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .duration-btn {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 4px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.1s;
+      font-family: inherit;
+    }
+
+    .duration-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .duration-btn.active {
+      background: var(--accent);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .custom-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .custom-input {
+      flex: 1;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 7px 10px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .custom-input:focus {
+      border-color: var(--accent-dark);
+    }
+
+    .custom-input::placeholder { color: var(--muted); }
+
+    .custom-label {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .cat-btn {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.1s;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cat-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .cat-btn.active {
+      background: var(--accent);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .cat-icon { font-size: 13px; }
+
+    .backend-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .backend-input {
+      flex: 1;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 11px;
+      padding: 7px 10px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .backend-input:focus { border-color: var(--accent-dark); }
+    .backend-input::placeholder { color: var(--muted); }
+
+    .divider {
+      height: 3px;
+      background: var(--border);
+      margin: 16px 20px 0;
+      opacity: 0.08;
+    }
+
+    .start-btn {
+      margin: 14px 20px 0;
+      width: calc(100% - 40px);
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      padding: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+
+    .start-btn:hover { transform: translateY(-1px); }
+    .start-btn:active { transform: scale(0.98); }
+    .start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Active session UI */
+    .active-session {
+      display: none;
+      padding: 16px 20px;
+    }
+
+    .active-session.visible { display: block; }
+
+    .session-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .session-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .session-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--green);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .timer-display {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
+    }
+
+    .session-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .meta-value { color: var(--text); font-weight: 800; }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width 1s linear;
+    }
+
+    .end-btn {
+      width: 100%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 9px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.1s;
+      text-transform: uppercase;
+    }
+
+    .end-btn:hover {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .open-sidebar-btn {
+      width: 100%;
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 9px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.1s;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-transform: uppercase;
+    }
+
+    .open-sidebar-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .setup-ui { display: block; }
+    .setup-ui.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🌱</div>
+    <div class="header-text">
+      <h1>SAT Tutor Agent</h1>
+      <p>Adaptive study sessions</p>
+    </div>
+  </div>
+
+  <!-- SETUP UI -->
+  <div class="setup-ui" id="setupUI">
+    <div class="section">
+      <div class="section-label">Session Duration</div>
+      <div class="duration-grid">
+        <button class="duration-btn" data-min="15">15m</button>
+        <button class="duration-btn active" data-min="30">30m</button>
+        <button class="duration-btn" data-min="45">45m</button>
+        <button class="duration-btn" data-min="60">60m</button>
+      </div>
+      <div class="custom-row">
+        <input class="custom-input" type="number" id="customMin" placeholder="Custom" min="5" max="180" />
+        <span class="custom-label">minutes</span>
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <div class="section-label">Ollama Host</div>
+      <div class="backend-row">
+        <input class="backend-input" type="text" id="ollamaHost" placeholder="http://localhost:11434" />
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <div class="section-label">Ollama Vision Model</div>
+      <div class="backend-row">
+        <input class="backend-input" type="text" id="ollamaVisionModel" placeholder="llama3.2-vision:11b" />
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <div class="section-label">Ollama Chat Model</div>
+      <div class="backend-row">
+        <input class="backend-input" type="text" id="ollamaChatModel" placeholder="llama3.2" />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="start-btn" id="startBtn">
+      <span>▶</span>
+      Start Session
+    </button>
+  </div>
+
+  <!-- ACTIVE SESSION UI -->
+  <div class="active-session" id="activeUI">
+    <div class="session-card">
+      <div class="session-header">
+        <div class="session-status">
+          <div class="pulse-dot"></div>
+          Session Active
+        </div>
+        <span style="font-size:20px;" id="activePlantEmoji">🌱</span>
+      </div>
+      <div class="timer-display" id="timerDisplay">30:00</div>
+      <div class="session-meta">
+        <div class="meta-item">
+          🔀 Switches: <span class="meta-value" id="switchDisplay">0</span>
+        </div>
+        <div class="meta-item">
+          📝 Scans: <span class="meta-value" id="scanDisplay">0</span>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:100%"></div>
+      </div>
+    </div>
+
+    <button class="open-sidebar-btn" id="openSidebarBtn">
+      🧠 Open AI Tutor Sidebar
+    </button>
+    <button class="end-btn" id="endBtn">End Session</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

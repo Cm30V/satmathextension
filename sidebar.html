@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAT Tutor</title>
+  <!--
+    KaTeX is bundled locally (lib/katex/) instead of loaded from a CDN.
+    Manifest V3's default extension_pages CSP is "script-src 'self'; object-src 'self'",
+    which silently blocks remote <script> tags — that's why math previously rendered
+    as raw, unformatted LaTeX (e.g. "\leq", "\( \)", "[ ... ]") instead of typeset math.
+    Local files under lib/katex/ are served from chrome-extension://<id>/... and are
+    always allowed under 'self'.
+  -->
+  <link rel="stylesheet" href="lib/katex/katex.min.css" />
+  <script src="lib/katex/katex.min.js"></script>
+  <script src="lib/katex/contrib/auto-render.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f0;
+      --surface: #ffffff;
+      --surface2: #f0f0e8;
+      --surface3: #e6e6dc;
+      --border: #111111;
+      --accent: #d4f95a;
+      --accent-soft: rgba(212, 249, 90, 0.35);
+      --green: #16a34a;
+      --green-soft: rgba(22, 163, 74, 0.1);
+      --amber: #d97706;
+      --amber-soft: rgba(217, 119, 6, 0.1);
+      --red: #dc2626;
+      --red-soft: rgba(220, 38, 38, 0.08);
+      --purple: #111111;
+      --text: #111111;
+      --muted: #6b6b66;
+      --muted2: #4a4a46;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .sidebar-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .header-logo { font-size: 18px; line-height: 1; }
+    .header-info { flex: 1; min-width: 0; }
+
+    .header-info h2 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .header-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    /* ── Status Bar ── */
+    .status-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .status-value {
+      color: var(--text);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timer-val { color: var(--text); }
+
+    .pulse-dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%,100%{opacity:1;transform:scale(1)}
+      50%{opacity:.4;transform:scale(.7)}
+    }
+
+    /* ── Plant ── */
+    .plant-section {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .plant-display {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+
+    .plant-visual {
+      --plant-hue: 120;
+      --plant-sat: 60%;
+      --plant-light: 42%;
+      --stem-light: 32%;
+      --leaf-opacity: 1;
+      --stem-scale: 0.3;
+      --leaf-scale: 0.5;
+      --canopy-scale: 0.6;
+      width: 56px;
+      height: 68px;
+      flex-shrink: 0;
+      transition: all 0.5s ease;
+    }
+
+    .live-plant {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      transition: all 0.5s ease;
+    }
+
+    .live-plant * {
+      transition: all 0.5s ease;
+    }
+
+    .plant-pot {
+      fill: #8b5e3c;
+      stroke: var(--border);
+      stroke-width: 1.2;
+    }
+
+    .plant-soil {
+      fill: #5c4033;
+    }
+
+    .plant-stem {
+      fill: none;
+      stroke: hsl(var(--plant-hue), calc(var(--plant-sat) - 8%), var(--stem-light));
+      stroke-width: 3.2;
+      stroke-linecap: round;
+      transform-box: fill-box;
+      transform-origin: center bottom;
+      transform: scaleY(var(--stem-scale));
+    }
+
+    .plant-leaf {
+      fill: hsl(var(--plant-hue), var(--plant-sat), var(--plant-light));
+      opacity: var(--leaf-opacity);
+      transform-box: fill-box;
+      transform-origin: center;
+      transform: scale(var(--leaf-scale));
+    }
+
+    .plant-stage {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .plant-visual[data-stage="seedling"] .plant-stage--seedling,
+    .plant-visual[data-stage="growing"] .plant-stage--growing,
+    .plant-visual[data-stage="flourishing"] .plant-stage--flourishing {
+      opacity: 1;
+    }
+
+    .plant-visual[data-stage="flourishing"] .plant-stage--flourishing {
+      transform: scale(var(--canopy-scale));
+      transform-origin: 50px 98px;
+    }
+
+    .plant-species {
+      opacity: 0;
+    }
+
+    .plant-visual[data-species="fern"] .plant-species--fern,
+    .plant-visual[data-species="sunflower"] .plant-species--sunflower,
+    .plant-visual[data-species="oak"] .plant-species--oak {
+      opacity: 1;
+    }
+
+    .plant-flower-center {
+      fill: #5c4a1f;
+    }
+
+    .plant-petal {
+      fill: hsl(var(--plant-hue), calc(var(--plant-sat) + 10%), calc(var(--plant-light) + 12%));
+      opacity: var(--leaf-opacity);
+    }
+
+    .header-plant-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      transition: background 0.5s ease;
+    }
+
+    .plant-emoji {
+      display: none;
+    }
+
+    .plant-info { flex: 1; min-width: 0; }
+
+    .plant-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .plant-bar-wrap {
+      height: 5px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .plant-bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease, background 0.5s ease;
+    }
+
+    .plant-score {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      padding: 0 14px;
+    }
+
+    .tab {
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      font-family: inherit;
+      white-space: nowrap;
+      margin-bottom: -1px;
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--text);
+      border-bottom-color: var(--text);
+    }
+
+    /* ── Main Content ── */
+    .main-content {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .tab-panel { display: none; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+    .tab-panel.active { display: flex; }
+
+    /* ── Chat Panel ── */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      max-width: 92%;
+    }
+
+    .msg.user { align-self: flex-end; }
+    .msg.ai { align-self: flex-start; }
+
+    .msg-bubble {
+      padding: 8px 11px;
+      border-radius: var(--radius);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+
+    .msg.user .msg-bubble {
+      background: var(--accent-soft);
+      border: 1px solid rgba(124, 106, 247, 0.3);
+      border-radius: var(--radius) var(--radius) 2px var(--radius);
+    }
+
+    .msg.ai .msg-bubble {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 2px var(--radius) var(--radius) var(--radius);
+    }
+
+    .msg-meta {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .msg.user .msg-meta { text-align: right; }
+
+    .msg.system {
+      align-self: center;
+      max-width: 100%;
+    }
+
+    .msg.system .msg-bubble {
+      background: var(--green-soft);
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--green);
+      border-radius: var(--radius);
+    }
+
+    .msg.error .msg-bubble {
+      background: var(--red-soft);
+      border: 1px solid rgba(248,113,113,0.25);
+      color: var(--red);
+      border-radius: var(--radius);
+      text-align: center;
+      font-size: 11.5px;
+    }
+
+    .topic-tag {
+      display: inline-block;
+      background: var(--accent-soft);
+      border: 1px solid rgba(124,106,247,0.3);
+      color: var(--purple);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+
+    .hint-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      margin-top: 6px;
+    }
+
+    .hint-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .hint-text {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted2);
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
+      flex-shrink: 0;
+    }
+
+    .typing-indicator.visible { display: flex; }
+
+    .typing-dot {
+      width: 6px; height: 6px;
+      background: var(--muted);
+      border-radius: 50%;
+      animation: typingBounce 1.2s infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingBounce {
+      0%,60%,100%{transform:translateY(0)}
+      30%{transform:translateY(-5px)}
+    }
+
+    /* ── Action Buttons ── */
+    .action-btns {
+      padding: 8px 14px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .action-btn {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--muted2);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background: var(--surface2);
+      color: var(--text);
+      border-color: var(--text);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Scan button — always enabled, prominent */
+    .scan-btn {
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .scan-btn:hover { opacity: 0.9; }
+    .scan-btn:active { transform: scale(0.97); }
+    .scan-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Scanning animation on the button */
+    .scan-btn.scanning {
+      animation: scanPulse 0.8s infinite alternate;
+    }
+
+    @keyframes scanPulse {
+      from { opacity: 1; }
+      to { opacity: 0.65; }
+    }
+
+    /* Chat input */
+    .chat-input-row {
+      padding: 8px 14px 12px;
+      display: flex;
+      gap: 6px;
+      border-top: 2px solid var(--border);
+      margin-top: 8px;
+      flex-shrink: 0;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      font-family: inherit;
+      resize: none;
+      transition: border-color 0.15s;
+      line-height: 1.4;
+    }
+
+    .chat-input:focus { border-color: var(--text); }
+    .chat-input::placeholder { color: var(--muted); }
+
+    .send-btn {
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 14px;
+      width: 34px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Streaks Panel ── */
+    .streaks-panel {
+      padding: 12px 14px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .streaks-panel::-webkit-scrollbar { width: 4px; }
+    .streaks-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Streak hero */
+    .streak-hero-card {
+      background: var(--text);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .streak-flame-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .streak-flame {
+      font-size: 30px;
+      line-height: 1;
+      filter: drop-shadow(0 0 6px rgba(251,191,36,0.6));
+    }
+
+    .streak-count {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .streak-hero-right { flex: 1; min-width: 0; }
+
+    .streak-hero-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #a8a8a0;
+      margin-bottom: 3px;
+    }
+
+    .streak-hero-sub {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      line-height: 1.4;
+    }
+
+    /* Stats row */
+    .streak-stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .streak-stat-box {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .streak-stat-val {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .streak-stat-lbl {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* Range selector */
+    .streak-range-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .streak-range-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .streak-range-btns {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .streak-range-btn {
+      flex: 1;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 4px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.1s;
+    }
+
+    .streak-range-btn:hover {
+      color: var(--text);
+      background: var(--surface2);
+    }
+
+    .streak-range-btn.active {
+      background: var(--accent);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    /* Chart card */
+    .streak-chart-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+
+    .streak-chart-title {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .streak-chart-wrap {
+      width: 100%;
+      position: relative;
+    }
+
+    .streak-chart-wrap canvas {
+      width: 100% !important;
+      height: auto !important;
+      display: block;
+    }
+
+    .streak-chart-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .streak-legend-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* Dots heatmap */
+    .streak-dots-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+
+    .streak-dots-row {
+      display: flex;
+      gap: 6px;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .streak-dot-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .streak-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+
+    .streak-dot.studied {
+      background: var(--accent);
+    }
+
+    .streak-dot.today {
+      border-color: var(--text);
+      border-width: 2px;
+    }
+
+    .streak-dot-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 30px 0;
+    }
+
+    .empty-state .empty-icon { font-size: 32px; margin-bottom: 8px; }
+
+    /* ── Summary Panel ── */
+    .summary-panel {
+      padding: 14px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .summary-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .summary-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .summary-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .summary-stat:last-child { border-bottom: none; }
+    .summary-stat-value { font-weight: 700; }
+
+    .topic-pill {
+      display: inline-block;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      margin: 3px 3px 0 0;
+    }
+
+    .topic-pill.weak   { background: var(--red-soft);   color: var(--red); }
+    .topic-pill.strong { background: var(--green-soft); color: var(--green); }
+
+    .practice-link {
+      display: block;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+
+    .practice-link:hover {
+      background: var(--accent-soft, #f0f0f0);
+    }
+
+    .plan-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .plan-item:last-child { border-bottom: none; }
+    .plan-minutes { font-size: 11px; color: var(--muted); }
+
+    .email-btn {
+      width: 100%;
+      background: var(--accent);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+      padding: 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.1s;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-transform: uppercase;
+    }
+
+    .email-btn:hover { transform: translateY(-1px); }
+
+    /* ── No session screen ── */
+    .no-session {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: 24px;
+      text-align: center;
+      gap: 8px;
+    }
+
+    .no-session-icon { font-size: 40px; }
+    .no-session-title { font-size: 16px; font-weight: 700; }
+    .no-session-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* Scrollbars */
+    .summary-panel::-webkit-scrollbar { width: 4px; }
+    .summary-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── KaTeX rendering ── */
+    .katex { font-size: 1.05em; }
+    .katex-display {
+      margin: 6px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .katex-display > .katex { text-align: left; }
+    .qcard-latex .katex-display { margin: 4px 0; }
+    .math-fallback {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.05em;
+      white-space: nowrap;
+    }
+    .math-fallback-display {
+      display: block;
+      margin: 6px 0;
+      overflow-x: auto;
+    }
+    .math-frac {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      vertical-align: middle;
+      line-height: 1;
+      margin: 0 2px;
+    }
+    .math-frac span:first-child {
+      border-bottom: 1px solid currentColor;
+      padding: 0 3px 1px;
+    }
+    .math-frac span:last-child { padding: 1px 3px 0; }
+    .math-radicand {
+      border-top: 1px solid currentColor;
+      padding: 0 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="sidebar-header">
+    <div class="header-logo" id="headerPlant"><span class="header-plant-dot"></span></div>
+    <div class="header-info">
+      <h2>SAT Tutor Agent</h2>
+      <div class="header-sub" id="headerSub">No active session</div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar" id="statusBar" style="display:none;">
+    <div class="status-item"><div class="pulse-dot"></div></div>
+    <div class="status-item">⏱ <span class="status-value timer-val" id="sbTimer">—</span></div>
+    <div class="status-item">🎯 <span class="status-value" id="sbFocus">—</span></div>
+    <div class="status-item">📝 <span class="status-value" id="sbScans">0</span></div>
+  </div>
+
+  <!-- Plant Section -->
+  <div class="plant-section" id="plantSection" style="display:none;">
+    <div class="plant-display">
+      <div class="plant-visual" id="plantVisual" data-stage="seedling" data-health="0">
+        <svg class="live-plant" viewBox="0 0 100 120" aria-hidden="true">
+          <path class="plant-pot" d="M28 96 H72 L66 112 H34 Z" />
+          <ellipse class="plant-soil" cx="50" cy="96" rx="18" ry="4" />
+
+          <path class="plant-stem" id="plantStemPath" d="M50 98 C49 86 51 74 50 70" />
+
+          <g class="plant-stage plant-stage--seedling">
+            <path class="plant-leaf" id="seedLeafLeft" d="M50 74 Q42 71 40 78 Q46 76 50 74" />
+            <path class="plant-leaf" id="seedLeafRight" d="M50 74 Q58 71 60 78 Q54 76 50 74" />
+          </g>
+
+          <g class="plant-stage plant-stage--growing">
+            <path class="plant-leaf" id="growLeafLeft" d="M50 62 Q34 48 38 68 Q46 64 50 62" />
+            <path class="plant-leaf" id="growLeafRight" d="M50 62 Q66 48 62 68 Q54 64 50 62" />
+            <path class="plant-leaf" d="M50 48 Q50 34 50 28 Q48 40 50 48" opacity="0.85" />
+          </g>
+
+          <g class="plant-stage plant-stage--flourishing">
+            <g class="plant-species plant-species--fern">
+              <path class="plant-leaf" d="M50 42 Q20 36 24 52 Q38 46 50 42" />
+              <path class="plant-leaf" d="M50 38 Q78 28 74 46 Q58 42 50 38" />
+              <path class="plant-leaf" d="M50 34 Q50 12 50 8 Q46 22 50 34" />
+              <path class="plant-leaf" d="M50 46 Q28 50 30 62 Q42 54 50 46" />
+              <path class="plant-leaf" d="M50 46 Q72 50 70 62 Q58 54 50 46" />
+            </g>
+            <g class="plant-species plant-species--sunflower">
+              <circle class="plant-flower-center" cx="50" cy="30" r="7" />
+              <ellipse class="plant-petal" cx="50" cy="16" rx="4" ry="9" />
+              <ellipse class="plant-petal" cx="50" cy="44" rx="4" ry="9" />
+              <ellipse class="plant-petal" cx="36" cy="30" rx="9" ry="4" />
+              <ellipse class="plant-petal" cx="64" cy="30" rx="9" ry="4" />
+              <ellipse class="plant-petal" cx="40" cy="18" rx="4" ry="8" transform="rotate(-35 40 18)" />
+              <ellipse class="plant-petal" cx="60" cy="18" rx="4" ry="8" transform="rotate(35 60 18)" />
+            </g>
+            <g class="plant-species plant-species--oak">
+              <path class="plant-leaf" d="M50 36 Q28 20 34 40 Q42 38 50 36" />
+              <path class="plant-leaf" d="M50 36 Q72 20 66 40 Q58 38 50 36" />
+              <path class="plant-leaf" d="M50 28 Q50 8 50 4 Q44 18 50 28" />
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="plant-info">
+        <div class="plant-label" id="plantLabel">Seedling — Health 0</div>
+        <div class="plant-bar-wrap">
+          <div class="plant-bar" id="plantBar" style="width:0%;background:var(--green)"></div>
+        </div>
+      </div>
+      <div class="plant-score" id="plantScore">0</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabsRow" style="display:none;">
+    <button class="tab active" data-tab="chat">💬 Tutor</button>
+    <button class="tab" data-tab="streaks">🔥 Streaks</button>
+    <button class="tab" data-tab="summary">📋 Summary</button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+
+    <!-- No session state -->
+    <div class="no-session" id="noSessionView">
+      <div class="no-session-icon">🌱</div>
+      <div class="no-session-title">Ready to grow</div>
+      <div class="no-session-sub">
+        Start a session from the extension popup,<br/>
+        then tap <strong>📸 Scan Question</strong> to analyze any question.
+      </div>
+    </div>
+
+    <!-- CHAT TAB -->
+    <div class="tab-panel active" id="panel-chat">
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg system">
+          <div class="msg-bubble">👋 Session started! Tap <strong>📸 Scan Question</strong> to analyze a question.</div>
+        </div>
+      </div>
+
+      <div class="typing-indicator" id="typingIndicator">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+
+      <!-- Action buttons: Scan is always first and always enabled -->
+      <div class="action-btns" id="actionBtns">
+        <button class="scan-btn" id="btnScan">📸 Scan Question</button>
+        <button class="action-btn" id="btnHint"     disabled>💡 Hint</button>
+        <button class="action-btn" id="btnSimilar"  disabled>🧠 Similar</button>
+        <button class="action-btn" id="btnStrategy" disabled>🎯 Strategy</button>
+        <button class="action-btn" id="btnSolution" disabled>👁 Solution</button>
+      </div>
+
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chatInput" rows="2"
+          placeholder="Ask the tutor anything..." disabled></textarea>
+        <button class="send-btn" id="sendBtn" disabled>↑</button>
+      </div>
+    </div>
+
+    <!-- STREAKS TAB -->
+    <div class="tab-panel" id="panel-streaks">
+      <div class="streaks-panel" id="streaksPanel">
+
+        <!-- Streak hero -->
+        <div class="streak-hero-card" id="streakHeroCard">
+          <div class="streak-flame-wrap">
+            <span class="streak-flame" id="streakFlame">🔥</span>
+            <span class="streak-count" id="streakCount">0</span>
+          </div>
+          <div class="streak-hero-right">
+            <div class="streak-hero-label">Day Streak</div>
+            <div class="streak-hero-sub" id="streakHeroSub">Study today to start your streak!</div>
+          </div>
+        </div>
+
+        <!-- Quick stats row -->
+        <div class="streak-stats-row">
+          <div class="streak-stat-box">
+            <div class="streak-stat-val" id="statWeekTotal">0m</div>
+            <div class="streak-stat-lbl">This Week</div>
+          </div>
+          <div class="streak-stat-box">
+            <div class="streak-stat-val" id="statBestStreak">0</div>
+            <div class="streak-stat-lbl">Best Streak</div>
+          </div>
+          <div class="streak-stat-box">
+            <div class="streak-stat-val" id="statTotalSessions">0</div>
+            <div class="streak-stat-lbl">Total Sessions</div>
+          </div>
+        </div>
+
+        <!-- Date range selector -->
+        <div class="streak-range-row">
+          <div class="streak-range-label">Show</div>
+          <div class="streak-range-btns">
+            <button class="streak-range-btn active" data-days="7">7d</button>
+            <button class="streak-range-btn" data-days="14">14d</button>
+            <button class="streak-range-btn" data-days="30">30d</button>
+            <button class="streak-range-btn" data-days="0">All</button>
+          </div>
+        </div>
+
+        <!-- Bar chart -->
+        <div class="streak-chart-card">
+          <div class="streak-chart-title">Study Time per Day</div>
+          <div class="streak-chart-wrap" id="streakChartWrap">
+            <canvas id="streakChart" width="290" height="110"></canvas>
+          </div>
+          <div class="streak-chart-legend">
+            <span class="streak-legend-dot"></span> minutes per session day
+          </div>
+        </div>
+
+        <!-- Day-dot heatmap row -->
+        <div class="streak-dots-card">
+          <div class="streak-chart-title">Daily Activity (last 7 days)</div>
+          <div class="streak-dots-row" id="streakDotsRow"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SUMMARY TAB -->
+    <div class="tab-panel" id="panel-summary">
+      <div class="summary-panel" id="summaryPanel">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div>Summary will appear when session ends.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="livePlant.js"></script>
+  <script type="module" src="sidebar.js"></script>
+</body>
+</html>

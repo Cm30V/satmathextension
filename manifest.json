@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "SAT Math Tutor Agent",
+  "version": "1.0.0",
+  "description": "AI-powered Math SAT study sessions with hints, focus tracking, and subtopic help with study session summary.",
+
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "alarms",
+    "notifications",
+    "scripting",
+    "sidePanel",
+    "tabCapture",
+    "identity"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup.html"
+  },
+
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar.html", "lib/katex/*", "lib/katex/contrib/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "commands": {
+    "capture_question": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "Capture and analyze a question region"
+    }
+  }
+}

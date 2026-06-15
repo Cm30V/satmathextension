@@ -12,6 +12,7 @@ run this after to prevent 403 error: launchctl setenv OLLAMA_ORIGINS "*"
 command for the chat model i used: ollama pull qwen2.5:7b
 
 command for the vision model i used: ollama pull qwen2.5vl:7b
+
 you can always download your own and then put it in the popup of the extension
 ### Install extension to browser
 go to chrome://extensions/ if your on google or edge://extensions/ if on edge

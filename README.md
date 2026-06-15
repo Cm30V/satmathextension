@@ -15,7 +15,13 @@ command for the vision model i used: ollama pull qwen2.5vl:7b
 
 you can always download your own and then put it in the popup of the extension
 ### Install extension to browser
-go to chrome://extensions/ if your on google or edge://extensions/ if on edge
+go to chrome://extensions/ if youreon google 
+
+or edge://extensions/ if on edge
+
+
 then turn on developer mode
+
+
 click on load unpacked then select the "satmathextension-main" folder and press select
 ### now you can use this extension and edit to your liking

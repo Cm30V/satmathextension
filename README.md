@@ -7,7 +7,9 @@ Click the green button that says "Code" and pull the folder called "satmathexten
 ### Install ollama ( if you havent)
 curl -fsSL https://ollama.com/install.sh | sh
 
-RUN THIS BEFORE YOU START UP OLLLMA to prevent 403 error: launchctl setenv OLLAMA_ORIGINS "*"
+RUN THIS COMMAND BELOW BEFORE YOU START UP OLLLMA to prevent 403 error: 
+
+launchctl setenv OLLAMA_ORIGINS "*"
 
 IF OLLAMAS ALREADY RUNNING, QUIT IT, AND RUN THAT COMMAND THEN START ollama again!
 

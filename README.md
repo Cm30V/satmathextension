@@ -31,3 +31,6 @@ then turn on developer mode
 
 click on load unpacked then select the "satmathextension-main" folder and press select
 ### now you can use this extension and edit to your liking
+
+# Demo vid of the extension
+[![Math SAT Tutor Browser Extension](https://img.youtube.com/vi/P65vH11gNVw/0.jpg)](https://www.youtube.com/watch?v=P65vH11gNVw)

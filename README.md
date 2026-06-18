@@ -3,7 +3,7 @@
 ## How to install for mac (run the commands in terminal)
 
 ### Download the zip file from this repo
-Click the green button that says "Code" and pull the folder called "satmathextension-main" to your desktop or wherever you can easily access
+Download satmathextension-main.zip to your desktop or wherever you can easily access
 ### Install ollama ( if you havent)
 curl -fsSL https://ollama.com/install.sh | sh
 
